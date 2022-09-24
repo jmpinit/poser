@@ -1,20 +1,21 @@
 <!doctype html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+        }
+    </style>
     <title>Poser</title>
-  </head>
-  <body>
-    <h1>Poser</h1>
-
-    <button id="startAndStop">Start</button>
-
-    <video id="videoInput" width="320" height="240"></video>
-    <canvas id="canvasOutput" width="320" height="240"></canvas>
-
-    <script src="https://webrtc.github.io/adapter/adapter-5.0.4.js" type="text/javascript"></script>
-    <script src="js/opencv.js"></script>
-    <script src="js/bundle.js"></script>
-  </body>
+</head>
+<body>
+<h1>Poser</h1>
+<input id="input-texture" type="file" />
+<input id="input-model" type="file" />
+<button id="btn-debug">Debug</button>
+<script src="js/bundle.js"></script>
+</body>
 </html>

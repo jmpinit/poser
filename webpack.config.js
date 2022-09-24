@@ -8,6 +8,18 @@ module.exports = {
     path: path.resolve(__dirname, 'build'),
     filename: 'js/bundle.js',
   },
+  module: {
+    rules: [
+      {
+        test: /\.frag/,
+        type: 'asset/source',
+      },
+      {
+        test: /\.vert/,
+        type: 'asset/source',
+      },
+    ],
+  },
   plugins: [
     new CopyPlugin({
       patterns: [
