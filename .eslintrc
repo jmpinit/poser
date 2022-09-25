@@ -3,6 +3,9 @@
     "browser": true
   },
   "extends": "airbnb",
+  "globals": {
+    "cv": true
+  },
   "rules": {
     "no-console": 0,
     "object-curly-newline": 0
