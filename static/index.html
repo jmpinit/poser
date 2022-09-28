@@ -4,122 +4,150 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        html, body {
-            padding: 0;
-            margin: 0;
-        }
-
         .container {
-            margin-left: 10%;
-            margin-right: 10%;
-        }
-
-        .app {
-            display: flex;
         }
 
         #model-section {
-            width: 50%;
             position: relative;
             color: white;
         }
 
-        #viewport {
-            height: 600px;
-        }
-
         #controls-3d {
+            position: absolute;
+            left: 10px;
+            top: 10px;
         }
 
-        #camera-section {
-            width: 50%;
-        }
-
-        #video-section {
-            position: relative;
+        #viewport {
+            width: 800px;
+            height: 600px;
         }
 
         #video-input {
-            position: absolute;
-            top: 0;
-            left: 0;
+            border: 1px solid;
 
             /* FIXME: don't assume camera aspect ratio */
             width: 800px;
             height: 600px;
         }
 
-        #video-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-
-            /* FIXME: don't assume camera aspect ratio */
-            width: 800px;
-            height: 600px;
+        td {
+            height: 1px;
         }
 
-        #controls-cam {
+        #capture-canvases {
+            height: 100%;
+            position: relative;
+        }
+
+        #capture-canvases canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            margin: auto;
+        }
+
+        #cam-table {
+            border: 1px solid;
+        }
+
+        #cam-table td {
+            border: 1px solid;
+            padding: 1em;
+        }
+
+        .controls {
+            width: 100%;
+            height: 100%;
         }
     </style>
     <title>Poser</title>
 </head>
 <body>
-    <div class="container">
-        <h1>Poser</h1>
-
-        <div class="app">
-            <!-- 3D -->
-            <div id="model-section">
-                <div id="controls-3d">
-                    <input id="input-texture" type="file" />
-                    <input id="input-model" type="file" />
-                    <button id="btn-debug">Debug</button>
-                </div>
-                <canvas width="512" height="512" id="viewport"></canvas>
-            </div>
-
-            <!-- Camera -->
-
-            <div id="camera-section">
-                <div id="controls-cam">
-                    <table>
+<div class="container">
+    <table>
+        <tr>
+            <td>
+                <video id="video-input"></video>
+            </td>
+            <td>
+                <div class="controls">
+                    <table id="cam-table">
+                        <thead>
                         <tr>
-                            <td>
-                                <select name="camera" id="sel-camera">
-                                    <!-- Filled with available cameras via JS -->
-                                </select>
-                                <button id="btn-start-pause">Start</button>
-                            </td>
+                            <th>Camera</th>
+                            <th></th> <!-- View/Capture button -->
+                            <th>Point Count</th>
+                            <th>Re-projection Error</th>
+                            <th>Pose</th>
                         </tr>
-                        <tr>
-                            <td>
-                                <span>Active tool:</span>
-                                <input type="radio" name="sel-tool" id="sel-tool-select" value="select" checked>
-                                <label for="sel-tool-select">Select</label>
-                                <input type="radio" name="sel-tool" id="sel-tool-create" value="create">
-                                <label for="sel-tool-create">Create</label>
-                                <input type="radio" name="sel-tool" id="sel-tool-move" value="move">
-                                <label for="sel-tool-move">Move</label>
-                                <input type="radio" name="sel-tool" id="sel-tool-delete" value="delete">
-                                <label for="sel-tool-delete">Delete</label>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><span id="tool-status"><!-- Written by JS --></span></td>
-                        </tr>
+                        </thead>
+                        <!-- JS adds rows for the cameras -->
                     </table>
-                    <br>
                 </div>
-                <div id="video-section">
-                    <video id="video-input"></video>
-                    <canvas id="video-overlay" width="800" height="600"></canvas>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <!-- 3D -->
+                <div id="model-section">
+                    <div id="controls-3d">
+                        <label for="input-texture">Texture</label>
+                        <input id="input-texture" type="file" />
+                        <label for="input-model">3D Model</label>
+                        <input id="input-model" type="file" />
+                    </div>
+                    <canvas width="512" height="512" id="viewport"></canvas>
                 </div>
-            </div>
-        </div>
-    </div>
+            </td>
+            <td>
+                <div id="capture-canvases">
+                    <!-- One canvas is added per camera by JS to hold the
+                    corresponding snapshot for that camera -->
+                </div>
+            </td>
+        </tr>
+    </table>
 
-    <script src="js/opencv.js"></script>
-    <script src="js/bundle.js"></script>
+    <!-- Camera -->
+
+    <!--            <div id="camera-section">-->
+    <!--                <div id="controls-cam">-->
+    <!--                    <table>-->
+    <!--                        <tr>-->
+    <!--                            <td>-->
+    <!--                                <select name="camera" id="sel-camera">-->
+    <!--                                    &lt;!&ndash; Filled with available cameras via JS &ndash;&gt;-->
+    <!--                                </select>-->
+    <!--                                <button id="btn-start-pause">Start</button>-->
+    <!--                            </td>-->
+    <!--                        </tr>-->
+    <!--                        <tr>-->
+    <!--                            <td>-->
+    <!--                                <span>Active tool:</span>-->
+    <!--                                <input type="radio" name="sel-tool" id="sel-tool-select" value="select" checked>-->
+    <!--                                <label for="sel-tool-select">Select</label>-->
+    <!--                                <input type="radio" name="sel-tool" id="sel-tool-create" value="create">-->
+    <!--                                <label for="sel-tool-create">Create</label>-->
+    <!--                                <input type="radio" name="sel-tool" id="sel-tool-move" value="move">-->
+    <!--                                <label for="sel-tool-move">Move</label>-->
+    <!--                                <input type="radio" name="sel-tool" id="sel-tool-delete" value="delete">-->
+    <!--                                <label for="sel-tool-delete">Delete</label>-->
+    <!--                            </td>-->
+    <!--                        </tr>-->
+    <!--                        <tr>-->
+    <!--                            <td><span id="tool-status">&lt;!&ndash; Written by JS &ndash;&gt;</span></td>-->
+    <!--                        </tr>-->
+    <!--                    </table>-->
+    <!--                    <br>-->
+    <!--                </div>-->
+    <!--                <div id="video-section">-->
+    <!--                </div>-->
+    <!--            </div>-->
+</div>
+
+<script src="js/opencv.js"></script>
+<script src="js/bundle.js"></script>
 </body>
 </html>

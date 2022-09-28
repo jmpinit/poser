@@ -309,60 +309,136 @@ function run() {
 
 cv.onRuntimeInitialized = () => run();
 
-// Populate the list of cameras
+let currentCameraId;
 
-const cameraSelectEl = document.getElementById('sel-camera');
-const startPauseButtonEl = document.getElementById('btn-start-pause');
-navigator.mediaDevices.enumerateDevices()
-  .then((devices) => devices.filter((d) => d.kind === 'videoinput'))
-  .then((devices) => {
-    devices.forEach((device) => {
-      const optionEl = document.createElement('option');
-      optionEl.innerHTML = device.label;
-      optionEl.setAttribute('value', device.deviceId);
-      cameraSelectEl.appendChild(optionEl);
-    });
-  });
-
-function startSelectedCamera() {
-  const deviceId = getSelectedCameraId();
+function startCamera(deviceId) {
+  currentCameraId = deviceId;
 
   videoInput.play();
 
   cam.start(deviceId, 99999, 99999)
     .then(() => {
-      // Resize the video overlay to match the resolution of the camera feed
-      videoOverlay.setAttribute('width', cam.width);
-      videoOverlay.setAttribute('height', cam.height);
+      // Hide all canvases
+      Array.from(document.querySelectorAll('#capture-canvases canvas'))
+        // eslint-disable-next-line no-param-reassign
+        .forEach((canvas) => { canvas.style.display = 'none'; });
 
-      console.log('Resized canvas to', cam.width, cam.height);
+      const captureCanvas = document.getElementById(deviceId);
+      captureCanvas.style.display = null;
 
-      startPauseButtonEl.innerHTML = 'Pause';
+      if (captureCanvas.getAttribute('width') === null) {
+        // Set the size of the video overlay to match the resolution of the camera feed
+        captureCanvas.setAttribute('width', cam.width);
+        captureCanvas.setAttribute('height', cam.height);
+      }
     });
 }
 
+// Populate the list of cameras
+
+function createCamRow(device, points, error, pose) {
+  const rowEl = document.createElement('tr');
+
+  const nameEl = document.createElement('td');
+  nameEl.innerHTML = device.label;
+  rowEl.appendChild(nameEl);
+
+  const viewCaptureButtonItemEl = document.createElement('td');
+  const viewCaptureButtonEl = document.createElement('button');
+  viewCaptureButtonEl.innerHTML = 'View';
+  viewCaptureButtonEl.addEventListener('click', () => {
+    // Reset all other view buttons
+    Array.from(document.querySelectorAll('#cam-table button'))
+      .filter((btn) => btn !== viewCaptureButtonEl)
+      // eslint-disable-next-line no-param-reassign
+      .forEach((btn) => { btn.innerHTML = 'View'; });
+
+    const viewingThisCamera = currentCameraId !== undefined && device.deviceId === currentCameraId;
+
+    if (!viewingThisCamera) {
+      startCamera(device.deviceId);
+      viewCaptureButtonEl.innerHTML = 'Capture';
+    } else {
+      // Capture
+      const videoCanvas = document.getElementById('video-input');
+      const captureCanvas = document.getElementById(device.deviceId);
+
+      const ctx = captureCanvas.getContext('2d');
+      ctx.drawImage(videoCanvas, 0, 0);
+    }
+  });
+  viewCaptureButtonItemEl.appendChild(viewCaptureButtonEl);
+  rowEl.appendChild(viewCaptureButtonItemEl);
+
+  // const captureButtonItemEl = document.createElement('td');
+  // const captureButtonEl = document.createElement('button');
+  // captureButtonEl.innerHTML = 'Capture';
+  // captureButtonEl.addEventListener('click', () => {
+  //   const videoCanvas = document.getElementById('video-input');
+  //   const captureCanvas = document.getElementById(device.deviceId);
+  //
+  //   const ctx = captureCanvas.getContext('2d');
+  //   ctx.drawImage(videoCanvas, 0, 0);
+  // });
+  // captureButtonItemEl.appendChild(captureButtonEl);
+  // rowEl.appendChild(captureButtonItemEl);
+
+  const pointsEl = document.createElement('td');
+  pointsEl.innerHTML = points;
+  rowEl.appendChild(pointsEl);
+
+  const errorEl = document.createElement('td');
+  errorEl.innerHTML = error;
+  rowEl.appendChild(errorEl);
+
+  const poseEl = document.createElement('td');
+  poseEl.innerHTML = pose;
+  rowEl.appendChild(poseEl);
+
+  return rowEl;
+}
+
+const camTableEl = document.getElementById('cam-table');
+navigator.mediaDevices.enumerateDevices()
+  .then((devices) => devices.filter((d) => d.kind === 'videoinput'))
+  .then((devices) => {
+    devices.forEach((device) => {
+      // Create a canvas for the camera captures
+      const capCanvasDivEl = document.getElementById('capture-canvases');
+
+      // The dimensions will be updated when the camera is activated
+      const capCanvasEl = document.createElement('canvas');
+      capCanvasEl.setAttribute('id', device.deviceId);
+      capCanvasDivEl.appendChild(capCanvasEl);
+
+      // Add a row for the camera UI/info
+      const camRowEl = createCamRow(device, 0, NaN, 'No solution');
+      camTableEl.appendChild(camRowEl);
+    });
+  });
+
 // Switch cameras when selection changes
-cameraSelectEl.addEventListener('change', () => {
-  if (cam.isStreaming()) {
-    cam.stop();
-  }
-
-  startSelectedCamera();
-
-  // Enable pause button
-  startPauseButtonEl.removeAttribute('disabled');
-});
-
-startPauseButtonEl.addEventListener('click', () => {
-  if (cam.isStreaming()) {
-    cam.stop();
-    videoInput.pause();
-
-    startPauseButtonEl.innerHTML = 'Start';
-  } else {
-    startSelectedCamera();
-  }
-});
+// cameraSelectEl.addEventListener('change', () => {
+//   if (cam.isStreaming()) {
+//     cam.stop();
+//   }
+//
+//   startSelectedCamera();
+//
+//   // Enable pause button
+//   startPauseButtonEl.removeAttribute('disabled');
+// });
+//
+// startPauseButtonEl.addEventListener('click', () => {
+//   if (cam.isStreaming()) {
+//     cam.stop();
+//     videoInput.pause();
+//
+//     startPauseButtonEl.innerHTML = 'Start';
+//   } else {
+//     startSelectedCamera();
+//   }
+// });
 
 function getSelectedToolName() {
   return document.querySelector('input[name="sel-tool"]:checked').value;
@@ -383,7 +459,7 @@ document.getElementsByName('sel-tool').forEach((el) => {
 });
 
 // Init the tool when we load
-handleToolChanged();
+// handleToolChanged();
 
 function renderCamPoints() {
   function drawPt(ctx, x, y) {
@@ -404,15 +480,15 @@ function renderCamPoints() {
   }
 }
 
-videoOverlay.addEventListener('click', (event) => {
-  // Convert the click into image coordinates
-  const elementWidth = event.target.offsetWidth;
-  const elementHeight = event.target.offsetHeight;
-  const pixelX = (cam.width * event.offsetX) / elementWidth;
-  const pixelY = (cam.height * event.offsetY) / elementHeight;
-
-  if (currentTool !== undefined) {
-    currentTool.handleCamClick(pixelX, pixelY);
-    renderCamPoints();
-  }
-});
+// videoOverlay.addEventListener('click', (event) => {
+//   // Convert the click into image coordinates
+//   const elementWidth = event.target.offsetWidth;
+//   const elementHeight = event.target.offsetHeight;
+//   const pixelX = (cam.width * event.offsetX) / elementWidth;
+//   const pixelY = (cam.height * event.offsetY) / elementHeight;
+//
+//   if (currentTool !== undefined) {
+//     currentTool.handleCamClick(pixelX, pixelY);
+//     renderCamPoints();
+//   }
+// });
