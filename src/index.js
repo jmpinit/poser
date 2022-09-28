@@ -1,15 +1,40 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+// import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
+// import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import EventEmitter from 'eventemitter3';
 import ReferencePoints from './reference-points';
 import MouseInteractionHandler from './mouse-interaction-handler';
+import { solvePnP } from './cv';
+import CameraManager from './camera';
+import { CreateTool } from './tools';
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+const canvasEl = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ canvas: canvasEl });
+
+// Create camera
+// Aspect will be updated in the resize handler
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+
+function handleResize() {
+  const w = renderer.domElement.offsetWidth;
+  const h = renderer.domElement.offsetHeight;
+
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(w, h);
+}
+{
+  const resizeObserver = new ResizeObserver(() => handleResize());
+  resizeObserver.observe(renderer.domElement);
+  handleResize();
+}
+
+// CONSTRUCT SCENE
 
 const light = new THREE.AmbientLight(0xffffff);
 scene.add(light);
@@ -27,7 +52,7 @@ scene.add(poseObject);
 
 camera.position.z = 250;
 
-const loader = new GLTFLoader();
+const loader = new FBXLoader();
 
 const referencePoints = new ReferencePoints(128, 10);
 poseObject.add(referencePoints.threeObject);
@@ -40,8 +65,19 @@ const rayCaster = new THREE.Raycaster();
 const mouseInteractionHandler = new MouseInteractionHandler();
 mouseInteractionHandler.connect(renderer.domElement);
 
+function setStatusText(text) {
+  const statusEl = document.getElementById('tool-status');
+  statusEl.innerHTML = text;
+}
+
 let pointOfInterest; // A point that may be dragged
 let pointHeld; // A point being dragged
+
+let currentTool;
+const pointPairs = [];
+const tools = {
+  create: new CreateTool(pointPairs, setStatusText),
+};
 
 function mousePositionOnObject(offsetX, offsetY) {
   const x = (offsetX / renderer.domElement.clientWidth) * 2 - 1;
@@ -57,15 +93,26 @@ function mousePositionOnObject(offsetX, offsetY) {
   return intersects[0].point;
 }
 
+function render3dPoints() {
+  // TODO: clear current points and add new ones
+  referencePoints.clearPoints();
+
+  // TODO: render the points slightly above the surface
+  pointPairs
+    .filter(({ object }) => object !== undefined)
+    .forEach(({ object }) => referencePoints.addPoint(object, object.scale || 10));
+}
+
 mouseInteractionHandler.on('click', (event) => {
   const position = mousePositionOnObject(event.offsetX, event.offsetY);
 
   if (position === undefined) {
+    // The user didn't click on the object's surface
     return;
   }
 
-  // TODO: create the point slightly above the surface
-  referencePoints.addPoint(position, 1);
+  currentTool.handleModelClick(position);
+  render3dPoints();
 });
 
 mouseInteractionHandler.on('mousedown', (event) => {
@@ -155,18 +202,217 @@ inputModelEl.addEventListener('change', () => {
   const uploadedFile = inputModelEl.files[0];
   const url = URL.createObjectURL(uploadedFile);
 
-  loader.load(url, function (gltf) {
-    scene.add(gltf.scene);
-    URL.revokeObjectURL(url);
+  loader.load(url, (object) => {
+    // const wireframe = new THREE.WireframeGeometry(geo);
+    //
+    // const line = new THREE.LineSegments(wireframe);
+    // line.material.depthTest = false;
+    // line.material.opacity = 0.25;
+    // line.material.transparent = true;
 
-    gltf.scene.traverse((child) => {
+    // poseObject.add(line);
+
+    console.log(object)
+    object.traverse((child) => {
       if (child.material) {
         console.log('Material to replace:', child.material);
+        // eslint-disable-next-line no-param-reassign
         child.material = new THREE.MeshBasicMaterial({ map: inputTexture });
       }
     });
+
+    poseObject.add(object);
+    URL.revokeObjectURL(url);
+
+    console.log('3D model loaded');
   }, undefined, (error) => {
     console.error(error);
     URL.revokeObjectURL(url);
   });
+});
+
+// Camera control
+
+function getSelectedCameraId() {
+  const camSelectEl = document.getElementById('sel-camera');
+  return camSelectEl.value;
+}
+
+const videoInput = document.getElementById('video-input');
+const videoOverlay = document.getElementById('video-overlay');
+
+const cam = new CameraManager(videoInput);
+
+function run() {
+  const imageWidth = 1920;
+  const imageHeight = 1080;
+  const sensorWidth = 0.036;
+  const sensorHeight = (sensorWidth * imageHeight) / imageWidth;
+  const focalLength = 0.05;
+
+  const points2d = [
+    0, 0,
+    imageWidth - 1, 0,
+    imageWidth - 1, imageHeight - 1,
+    0, imageHeight - 1,
+  ];
+
+  const points3d = [
+    -0.539905, -0.303625, 0,
+    0.539754, -0.303495, 0,
+    0.539412, 0.303165, 0,
+    -0.539342, 0.303176, 0,
+  ];
+
+  console.log(solvePnP(imageWidth, imageHeight, sensorWidth, sensorHeight, focalLength, points2d, points3d));
+}
+
+// function run() {
+//   cam.on('canplay', () => {
+//     videoInput.width = videoInput.videoWidth;
+//     videoInput.height = videoInput.videoHeight;
+//
+//     const video = document.getElementById('video-input');
+//     const src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
+//     const dst = new cv.Mat(video.height, video.width, cv.CV_8UC1);
+//     const cap = new cv.VideoCapture(video);
+//
+//     const FPS = 30;
+//     function processVideo() {
+//       try {
+//         if (!cam.isStreaming()) {
+//           // Cleanup and stop
+//           src.delete();
+//           dst.delete();
+//           return;
+//         }
+//
+//         const begin = Date.now();
+//
+//         // start processing.
+//         cap.read(src);
+//         cv.cvtColor(src, dst, cv.COLOR_RGBA2GRAY);
+//         cv.imshow('video-output', dst);
+//
+//         // Schedule the next update
+//         const delay = 1000 / FPS - (Date.now() - begin);
+//         setTimeout(processVideo, delay);
+//       } catch (err) {
+//         console.error(err);
+//       }
+//     }
+//
+//     // schedule the first one.
+//     setTimeout(processVideo, 0);
+//   });
+// }
+
+cv.onRuntimeInitialized = () => run();
+
+// Populate the list of cameras
+
+const cameraSelectEl = document.getElementById('sel-camera');
+const startPauseButtonEl = document.getElementById('btn-start-pause');
+navigator.mediaDevices.enumerateDevices()
+  .then((devices) => devices.filter((d) => d.kind === 'videoinput'))
+  .then((devices) => {
+    devices.forEach((device) => {
+      const optionEl = document.createElement('option');
+      optionEl.innerHTML = device.label;
+      optionEl.setAttribute('value', device.deviceId);
+      cameraSelectEl.appendChild(optionEl);
+    });
+  });
+
+function startSelectedCamera() {
+  const deviceId = getSelectedCameraId();
+
+  videoInput.play();
+
+  cam.start(deviceId, 99999, 99999)
+    .then(() => {
+      // Resize the video overlay to match the resolution of the camera feed
+      videoOverlay.setAttribute('width', cam.width);
+      videoOverlay.setAttribute('height', cam.height);
+
+      console.log('Resized canvas to', cam.width, cam.height);
+
+      startPauseButtonEl.innerHTML = 'Pause';
+    });
+}
+
+// Switch cameras when selection changes
+cameraSelectEl.addEventListener('change', () => {
+  if (cam.isStreaming()) {
+    cam.stop();
+  }
+
+  startSelectedCamera();
+
+  // Enable pause button
+  startPauseButtonEl.removeAttribute('disabled');
+});
+
+startPauseButtonEl.addEventListener('click', () => {
+  if (cam.isStreaming()) {
+    cam.stop();
+    videoInput.pause();
+
+    startPauseButtonEl.innerHTML = 'Start';
+  } else {
+    startSelectedCamera();
+  }
+});
+
+function getSelectedToolName() {
+  return document.querySelector('input[name="sel-tool"]:checked').value;
+}
+
+function handleToolChanged() {
+  if (currentTool !== undefined) {
+    currentTool.cleanup();
+  }
+
+  const toolName = getSelectedToolName();
+  currentTool = tools[toolName];
+  console.log(`Current tool is ${toolName}`);
+}
+
+document.getElementsByName('sel-tool').forEach((el) => {
+  el.addEventListener('click', () => handleToolChanged());
+});
+
+// Init the tool when we load
+handleToolChanged();
+
+function renderCamPoints() {
+  function drawPt(ctx, x, y) {
+    ctx.fillStyle = '#f00';
+    const radius = 5;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
+    ctx.fill();
+  }
+
+  const ctx = videoOverlay.getContext('2d');
+
+  for (let i = 0; i < pointPairs.length; i += 1) {
+    if (pointPairs[i].camera !== undefined) {
+      const { x, y } = pointPairs[i].camera;
+      drawPt(ctx, x, y);
+    }
+  }
+}
+
+videoOverlay.addEventListener('click', (event) => {
+  // Convert the click into image coordinates
+  const elementWidth = event.target.offsetWidth;
+  const elementHeight = event.target.offsetHeight;
+  const pixelX = (cam.width * event.offsetX) / elementWidth;
+  const pixelY = (cam.height * event.offsetY) / elementHeight;
+
+  if (currentTool !== undefined) {
+    currentTool.handleCamClick(pixelX, pixelY);
+    renderCamPoints();
+  }
 });

@@ -34,9 +34,9 @@ function createPointsObject(numPoints) {
 export default class DraggablePointGroup {
   constructor(maxPointsCount) {
     this.maxPointsCount = maxPointsCount;
-    this.pointCount = 0;
     this.threeObject = createPointsObject(maxPointsCount);
 
+    this.pointCount = 0;
     this.points = {};
   }
 
@@ -106,6 +106,12 @@ export default class DraggablePointGroup {
     this.setPointScale(pointRef, scale);
 
     return pointRef;
+  }
+
+  clearPoints() {
+    this.points = {};
+    this.pointCount = 0;
+    this.threeObject.geometry.setDrawRange(0, this.pointCount);
   }
 
   getNearestPoint(position) {
