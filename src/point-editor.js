@@ -17,8 +17,6 @@ function drawPt(ctx, x, y) {
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
   ctx.fill();
-
-  console.log(ctx, x, y)
 }
 
 /**
@@ -56,6 +54,9 @@ export default class PointEditor {
         && device.deviceId === this.currentCameraId;
 
       if (!viewingThisCamera) {
+        // Cancel finishing the current point pair if it's incomplete
+        this.cancelIncompletePair();
+
         this.startCamera(device.deviceId)
           .then(() => {
             viewCaptureButtonEl.innerHTML = 'Capture';
@@ -74,6 +75,7 @@ export default class PointEditor {
 
         // Reset the point pairs for the new image
         this.currentPointPairs().length = 0;
+        this.render();
       }
     });
     viewCaptureButtonItemEl.appendChild(viewCaptureButtonEl);
@@ -131,8 +133,17 @@ export default class PointEditor {
 
     document.getElementsByName('sel-tool').forEach((el) => {
       el.addEventListener('click', () => {
-        this.currentTool = getSelectedToolName();
-        console.log(`Current tool is now ${this.currentToolName}`);
+        const toolSelected = getSelectedToolName();
+
+        if (toolSelected !== this.currentTool) {
+          // Handle tool change
+
+          // If we were in the middle of creating a new point pair, cancel it
+          this.cancelIncompletePair();
+
+          this.currentTool = toolSelected;
+          console.log(`Current tool is now ${this.currentToolName}`);
+        }
       });
     });
 
@@ -154,7 +165,7 @@ export default class PointEditor {
       const pixelY = (imageOverlayCanvas.height * event.offsetY) / elementHeight;
 
       if (this.currentToolName !== undefined) {
-        this.handleCamClick(pixelX, pixelY);
+        this.handleImageClick(pixelX, pixelY);
       }
     });
   }
@@ -184,10 +195,11 @@ export default class PointEditor {
     const imageOverlay = document.getElementById('image-overlay');
     const ctx = imageOverlay.getContext('2d');
 
+    ctx.clearRect(0, 0, imageOverlay.width, imageOverlay.height);
+
     pointPairs
       .filter(({ image }) => image !== undefined)
       .forEach(({ image }) => {
-        console.log('Point at', image)
         const { x, y } = image;
         drawPt(ctx, x, y);
       });
@@ -199,6 +211,7 @@ export default class PointEditor {
   }
 
   // Webcam control
+
   startCamera(deviceId) {
     this.currentCameraId = deviceId;
 
@@ -233,19 +246,97 @@ export default class PointEditor {
 
   // Interaction
 
-  handleModelClick(position) {
+  lastPair() {
     const pointPairs = this.currentPointPairs();
 
-    console.log('Model click', position);
-    pointPairs.push({ model: position });
+    if (pointPairs === undefined || pointPairs.length === 0) {
+      return undefined;
+    }
+
+    return pointPairs[pointPairs.length - 1];
+  }
+
+  lastPairComplete() {
+    const last = this.lastPair();
+
+    if (last === undefined) {
+      return false;
+    }
+
+    return last.image !== undefined && last.model !== undefined;
+  }
+
+  readyForNewPair() {
+    return this.lastPair() === undefined || this.lastPairComplete();
+  }
+
+  cancelIncompletePair() {
+    if (this.currentPointPairs() !== undefined && !this.lastPairComplete()) {
+      const pointPairs = this.currentPointPairs();
+      pointPairs.splice(pointPairs.length - 1, 1);
+    }
+  }
+
+  waitingForModelPoint() {
+    if (this.readyForNewPair()) {
+      return false;
+    }
+
+    return this.lastPair().model === undefined;
+  }
+
+  waitingForImagePoint() {
+    if (this.readyForNewPair()) {
+      return false;
+    }
+
+    return this.lastPair().image === undefined;
+  }
+
+  handleModelClick(position) {
+    console.log('Model click', position, this.currentPointPairs());
+
+    if (this.waitingForImagePoint()) {
+      // Need to wait for the camera point to be defined
+      // before we define any more model points
+      return;
+    }
+
+    if (this.readyForNewPair()) {
+      // Add a new empty point pair
+      this.currentPointPairs().push({});
+
+      setStatusText('Waiting for image point');
+    } else {
+      // This model point finishes the pair so we can clear the status text
+      setStatusText('');
+    }
+
+    // Set the camera point position
+    this.lastPair().model = position;
+
     this.render();
   }
 
-  handleCamClick(x, y) {
-    const pointPairs = this.currentPointPairs();
+  handleImageClick(x, y) {
+    console.log('Image click', x, y);
 
-    console.log('Cam click', x, y);
-    pointPairs.push({ image: { x, y } });
+    if (this.waitingForModelPoint()) {
+      // Need to wait for the model point to be defined
+      // before we define any more model points
+      return;
+    }
+
+    if (this.readyForNewPair()) {
+      // Add a new empty point pair
+      this.currentPointPairs().push({});
+
+      setStatusText('Waiting for model point');
+    }
+
+    // Set the camera point position
+    this.lastPair().image = { x, y };
+
     this.render();
   }
 }
