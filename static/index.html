@@ -35,12 +35,12 @@
             height: 1px;
         }
 
-        #capture-canvases {
+        .image-canvases {
             height: 100%;
             position: relative;
         }
 
-        #capture-canvases canvas {
+        .image-canvases canvas {
             position: absolute;
             left: 0;
             top: 0;
@@ -97,55 +97,43 @@
                         <input id="input-texture" type="file" />
                         <label for="input-model">3D Model</label>
                         <input id="input-model" type="file" />
+                        <table>
+                            <tr><td>Tools:</td></tr>
+                            <tr>
+                                <td>
+                                    <input type="radio" name="sel-tool" id="sel-tool-create" value="create" checked>
+                                    <label for="sel-tool-create">Create</label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <input type="radio" name="sel-tool" id="sel-tool-move" value="move">
+                                    <label for="sel-tool-move">Move</label>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <input type="radio" name="sel-tool" id="sel-tool-delete" value="delete">
+                                    <label for="sel-tool-delete">Delete</label>
+                                </td>
+                            </tr>
+                            <tr><td><span id="tool-status"><!-- Set by JS --></span></td></tr>
+                        </table>
                     </div>
                     <canvas width="512" height="512" id="viewport"></canvas>
                 </div>
             </td>
             <td>
-                <div id="capture-canvases">
+                <div class="image-canvases">
+                    <div id="capture-canvases">
+                        <!-- One canvas is added per camera by JS to hold the
+                        corresponding snapshot for that camera -->
+                    </div>
                     <canvas id="image-overlay"></canvas>
-                    <!-- One canvas is added per camera by JS to hold the
-                    corresponding snapshot for that camera -->
                 </div>
             </td>
         </tr>
     </table>
-
-    <!-- Camera -->
-
-    <!--            <div id="camera-section">-->
-    <!--                <div id="controls-cam">-->
-    <!--                    <table>-->
-    <!--                        <tr>-->
-    <!--                            <td>-->
-    <!--                                <select name="camera" id="sel-camera">-->
-    <!--                                    &lt;!&ndash; Filled with available cameras via JS &ndash;&gt;-->
-    <!--                                </select>-->
-    <!--                                <button id="btn-start-pause">Start</button>-->
-    <!--                            </td>-->
-    <!--                        </tr>-->
-    <!--                        <tr>-->
-    <!--                            <td>-->
-    <!--                                <span>Active tool:</span>-->
-    <!--                                <input type="radio" name="sel-tool" id="sel-tool-select" value="select" checked>-->
-    <!--                                <label for="sel-tool-select">Select</label>-->
-    <!--                                <input type="radio" name="sel-tool" id="sel-tool-create" value="create">-->
-    <!--                                <label for="sel-tool-create">Create</label>-->
-    <!--                                <input type="radio" name="sel-tool" id="sel-tool-move" value="move">-->
-    <!--                                <label for="sel-tool-move">Move</label>-->
-    <!--                                <input type="radio" name="sel-tool" id="sel-tool-delete" value="delete">-->
-    <!--                                <label for="sel-tool-delete">Delete</label>-->
-    <!--                            </td>-->
-    <!--                        </tr>-->
-    <!--                        <tr>-->
-    <!--                            <td><span id="tool-status">&lt;!&ndash; Written by JS &ndash;&gt;</span></td>-->
-    <!--                        </tr>-->
-    <!--                    </table>-->
-    <!--                    <br>-->
-    <!--                </div>-->
-    <!--                <div id="video-section">-->
-    <!--                </div>-->
-    <!--            </div>-->
 </div>
 
 <script src="js/opencv.js"></script>

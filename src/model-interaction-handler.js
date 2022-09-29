@@ -59,3 +59,11 @@ export default class ModelInteractionHandler extends EventEmitter {
     this.mouseInteractionHandler.on('dragend', () => this.emit('dragend'));
   }
 }
+
+// Test ModelInteractionHandler
+// modelInteractionHandler.on('click', (pos) => console.log('Model click at', pos));
+// modelInteractionHandler.on('mousedown', (pos) => console.log('Model mousedown at', pos));
+// modelInteractionHandler.on('mouseup', () => console.log('Model mouseup'));
+// modelInteractionHandler.on('dragstart', (pos) => console.log('Model dragstart at', pos));
+// modelInteractionHandler.on('drag', (pos) => console.log('Model drag at', pos));
+// modelInteractionHandler.on('dragend', () => console.log('Model dragend'));

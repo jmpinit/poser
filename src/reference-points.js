@@ -32,7 +32,7 @@ function createPointsObject(numPoints) {
 }
 
 export default class DraggablePointGroup {
-  constructor(maxPointsCount) {
+  constructor(maxPointsCount = 128) {
     this.maxPointsCount = maxPointsCount;
     this.threeObject = createPointsObject(maxPointsCount);
 
