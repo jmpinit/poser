@@ -34,8 +34,11 @@ export default class MouseInteractionHandler extends EventEmitter {
     const y = event.offsetY;
 
     if (this.distanceFromTouchDown(x, y) >= this.dragThreshold) {
+      if (!this.dragging) {
+        this.emit('dragstart', event);
+      }
+
       this.dragging = true;
-      this.emit('dragstart', event);
     }
 
     if (this.dragging) {
@@ -49,6 +52,8 @@ export default class MouseInteractionHandler extends EventEmitter {
     } else {
       this.emit('dragend');
     }
+
+    this.emit('mouseup', event);
 
     this.dragging = false;
     this.touchDownX = undefined;
