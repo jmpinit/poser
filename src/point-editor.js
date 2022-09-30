@@ -24,6 +24,17 @@ function drawPt(ctx, x, y) {
   ctx.stroke();
 }
 
+function downloadObjectAsJson(exportObj, exportName){
+  // Adapted from https://stackoverflow.com/a/30800715
+  const dataStr = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(exportObj))}`;
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute('href', dataStr);
+  downloadAnchorNode.setAttribute('download', `${exportName}.json`);
+  document.body.appendChild(downloadAnchorNode); // required for Firefox
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+}
+
 /**
  * Main controller for editing points across 3D model and image
  */
@@ -34,6 +45,8 @@ export default class PointEditor {
     this.scene = scene;
 
     this.pointPairs = {};
+    this.solutions = {};
+    this.cameraInfo = {};
     this.currentToolName = getSelectedToolName();
     this.modelPointsManager = new ReferencePoints();
     this.cvReady = false;
@@ -117,6 +130,10 @@ export default class PointEditor {
       .then((devices) => devices.filter((d) => d.kind === 'videoinput'))
       .then((devices) => {
         devices.forEach((device) => {
+          this.cameraInfo[device.deviceId] = {
+            label: device.label,
+          };
+
           // Each camera will have an associated list of point pairs
           this.pointPairs[device.deviceId] = [];
 
@@ -180,6 +197,12 @@ export default class PointEditor {
       if (this.currentToolName !== undefined) {
         this.handleImageClick(pixelX, pixelY);
       }
+    });
+
+    // Export button
+    document.getElementById('btn-export-solution').addEventListener('click', () => {
+      console.log(JSON.stringify(this.solutions));
+      downloadObjectAsJson(this.solutions, 'camera-solutions');
     });
   }
 
@@ -310,7 +333,11 @@ export default class PointEditor {
         points2d,
         points3d,
       );
-      console.log('solvePnP', solution);
+
+      this.solutions[this.currentCameraId] = {
+        label: this.cameraInfo[this.currentCameraId],
+        pose: solution,
+      };
 
       // TODO: calculate and update re-projection error
       const errorEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(4)`);

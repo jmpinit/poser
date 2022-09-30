@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import { solvePnP } from './cv';
 import attachModelLoaders from './model-loading';
 import PointEditor from './point-editor';
 
@@ -14,7 +13,7 @@ const renderer = new THREE.WebGLRenderer({
 
 // Create camera
 // Aspect will be updated in the resize handler
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 10000);
 
 const scene = new THREE.Scene();
 
