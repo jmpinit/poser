@@ -1,3 +1,7 @@
+function distance(x1, y1, x2, y2) {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
 function rotationMatrixToEulerAngles(rotMat) {
   const sy = Math.sqrt(
     rotMat.data64F[0] * rotMat.data64F[0]
@@ -43,8 +47,9 @@ export function solvePnP(
   // TODO: handle distortionCoeffs
   const distortionMat = cv.matFromArray(0, 0, cv.CV_64F, []);
 
-  const points2dMat = cv.matFromArray(4, 2, cv.CV_64F, points2d);
-  const points3dMat = cv.matFromArray(4, 3, cv.CV_64F, points3d);
+  const pointCount = Math.floor(points2d.length / 2);
+  const points2dMat = cv.matFromArray(pointCount, 2, cv.CV_64F, points2d);
+  const points3dMat = cv.matFromArray(pointCount, 3, cv.CV_64F, points3d);
 
   const rotVec = new cv.Mat();
   const transVec = new cv.Mat();
@@ -68,6 +73,28 @@ export function solvePnP(
   cv.Rodrigues(rotVec, rotMat, _jacobian);
 
   const eulerAngles = rotationMatrixToEulerAngles(rotMat);
+
+  // Calculate the re-projection error
+  const reprojPointsMat = cv.matFromArray(pointCount, 2, cv.CV_64F, points2d);
+  cv.projectPoints(points3dMat, rotVec, transVec, cameraMat, distortionMat, reprojPointsMat);
+
+  let totalError = 0;
+  for (let i = 0; i < pointCount; i += 1) {
+    const x1 = points2d[i];
+    const y1 = points2d[i + 1];
+
+    const x2 = reprojPointsMat.data64F[i];
+    const y2 = reprojPointsMat.data64F[i + 1];
+
+    console.log(x1, y1, x2, y2);
+
+    totalError += distance(x1, y1, x2, y2);
+  }
+
+  const error = totalError / pointCount;
+
+  console.log('Re-projected error', error);
+
   const solution = {
     position: {
       x: transVec.data64F[0],
@@ -79,6 +106,7 @@ export function solvePnP(
       y: eulerAngles.data64F[1],
       z: eulerAngles.data64F[2],
     },
+    error,
   };
 
   eulerAngles.delete();

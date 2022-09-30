@@ -47,12 +47,12 @@ poseObject.name = 'pose-object';
 scene.add(poseObject);
 
 // Create some test geometry
-{
-  const geometry = new THREE.SphereGeometry(150, 32, 32);
-  const material = new THREE.MeshBasicMaterial({ color: 0xaaaaaaaa });
-  const testObj = new THREE.Mesh(geometry, material);
-  poseObject.add(testObj);
-}
+// {
+//   const geometry = new THREE.SphereGeometry(150, 32, 32);
+//   const material = new THREE.MeshBasicMaterial({ color: 0xaaaaaaaa });
+//   const testObj = new THREE.Mesh(geometry, material);
+//   poseObject.add(testObj);
+// }
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.update();
@@ -80,32 +80,7 @@ attachModelLoaders(scene);
 const pointEditor = new PointEditor(renderer, camera, scene);
 pointEditor.setup();
 
-// ===========
-// OPENCV TEST
-// ===========
-
-function run() {
-  const imageWidth = 1920;
-  const imageHeight = 1080;
-  const sensorWidth = 0.036;
-  const sensorHeight = (sensorWidth * imageHeight) / imageWidth;
-  const focalLength = 0.05;
-
-  const points2d = [
-    0, 0,
-    imageWidth - 1, 0,
-    imageWidth - 1, imageHeight - 1,
-    0, imageHeight - 1,
-  ];
-
-  const points3d = [
-    -0.539905, -0.303625, 0,
-    0.539754, -0.303495, 0,
-    0.539412, 0.303165, 0,
-    -0.539342, 0.303176, 0,
-  ];
-
-  console.log(solvePnP(imageWidth, imageHeight, sensorWidth, sensorHeight, focalLength, points2d, points3d));
-}
-
-cv.onRuntimeInitialized = () => run();
+cv.onRuntimeInitialized = () => {
+  // HACK: maybe make this nicer later by queuing ops until runtime is ready?
+  pointEditor.cvReady = true;
+};

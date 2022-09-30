@@ -16,6 +16,11 @@
             position: absolute;
             left: 10px;
             top: 10px;
+            pointer-events: none
+        }
+
+        .clickable {
+            pointer-events: auto;
         }
 
         #viewport {
@@ -93,31 +98,31 @@
                 <!-- 3D -->
                 <div id="model-section">
                     <div id="controls-3d">
-                        <label for="input-texture">Texture</label>
-                        <input id="input-texture" type="file" />
-                        <label for="input-model">3D Model</label>
-                        <input id="input-model" type="file" />
+                        <label class="clickable" for="input-texture">Texture</label>
+                        <input class="clickable" id="input-texture" type="file" accept=".jpg,.png" />
+                        <label class="clickable" for="input-model">3D Model</label>
+                        <input class="clickable" id="input-model" type="file" accept=".fbx" disabled />
                         <table>
-                            <tr><td>Tools:</td></tr>
+                            <tr><td class="clickable">Tools:</td></tr>
                             <tr>
                                 <td>
-                                    <input type="radio" name="sel-tool" id="sel-tool-create" value="create" checked>
-                                    <label for="sel-tool-create">Create</label>
+                                    <input class="clickable" type="radio" name="sel-tool" id="sel-tool-create" value="create" checked>
+                                    <label class="clickable" for="sel-tool-create">Create</label>
                                 </td>
                             </tr>
                             <tr>
                                 <td>
-                                    <input type="radio" name="sel-tool" id="sel-tool-move" value="move">
-                                    <label for="sel-tool-move">Move</label>
+                                    <input class="clickable" type="radio" name="sel-tool" id="sel-tool-move" value="move">
+                                    <label class="clickable" for="sel-tool-move">Move</label>
                                 </td>
                             </tr>
                             <tr>
                                 <td>
-                                    <input type="radio" name="sel-tool" id="sel-tool-delete" value="delete">
-                                    <label for="sel-tool-delete">Delete</label>
+                                    <input class="clickable" type="radio" name="sel-tool" id="sel-tool-delete" value="delete">
+                                    <label class="clickable" for="sel-tool-delete">Delete</label>
                                 </td>
                             </tr>
-                            <tr><td><span id="tool-status"><!-- Set by JS --></span></td></tr>
+                            <tr><td><span class="clickable" id="tool-status"><!-- Set by JS --></span></td></tr>
                         </table>
                     </div>
                     <canvas width="512" height="512" id="viewport"></canvas>

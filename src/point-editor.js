@@ -1,6 +1,8 @@
+import * as THREE from 'three';
 import ReferencePoints from './reference-points';
 import ModelInteractionHandler from './model-interaction-handler';
 import CameraManager from './camera';
+import { solvePnP } from './cv';
 
 function getSelectedToolName() {
   return document.querySelector('input[name="sel-tool"]:checked').value;
@@ -12,11 +14,14 @@ function setStatusText(text) {
 }
 
 function drawPt(ctx, x, y) {
-  ctx.fillStyle = '#f00';
-  const radius = 50;
+  ctx.strokeStyle = '#f00';
+
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
-  ctx.fill();
+  ctx.moveTo(x - 5, y - 5);
+  ctx.lineTo(x + 5, y + 5);
+  ctx.moveTo(x + 5, y - 5);
+  ctx.lineTo(x - 5, y + 5);
+  ctx.stroke();
 }
 
 /**
@@ -31,10 +36,12 @@ export default class PointEditor {
     this.pointPairs = {};
     this.currentToolName = getSelectedToolName();
     this.modelPointsManager = new ReferencePoints();
+    this.cvReady = false;
   }
 
   createCamRow(device, points, error, pose) {
     const rowEl = document.createElement('tr');
+    rowEl.setAttribute('id', `row-${device.deviceId}`);
 
     const nameEl = document.createElement('td');
     nameEl.innerHTML = device.label;
@@ -53,6 +60,9 @@ export default class PointEditor {
       const viewingThisCamera = this.currentCameraId !== undefined
         && device.deviceId === this.currentCameraId;
 
+      const videoCanvas = document.getElementById('video-input');
+      const captureCanvas = document.getElementById(device.deviceId);
+
       if (!viewingThisCamera) {
         // Cancel finishing the current point pair if it's incomplete
         this.cancelIncompletePair();
@@ -67,11 +77,9 @@ export default class PointEditor {
           });
       } else {
         // Capture
-        const videoCanvas = document.getElementById('video-input');
-        const captureCanvas = document.getElementById(device.deviceId);
 
         const ctx = captureCanvas.getContext('2d');
-        ctx.drawImage(videoCanvas, 0, 0);
+        ctx.drawImage(videoCanvas, 0, 0, captureCanvas.width, captureCanvas.height);
 
         // Reset the point pairs for the new image
         this.currentPointPairs().length = 0;
@@ -123,6 +131,11 @@ export default class PointEditor {
           // Add a row for the camera UI/info
           const camRowEl = this.createCamRow(device, 0, NaN, 'No solution');
           camTableEl.appendChild(camRowEl);
+
+          // Add a 3D object to the scene to represent the pose solution for the camera
+          const axesHelper = new THREE.AxesHelper(50);
+          axesHelper.name = device.deviceId;
+          this.scene.add(axesHelper);
         });
       });
 
@@ -206,6 +219,10 @@ export default class PointEditor {
   }
 
   render() {
+    if (this.lastPairComplete()) {
+      this.updateSolution();
+    }
+
     this.updateModelPoints();
     this.renderImagePoints();
   }
@@ -244,6 +261,74 @@ export default class PointEditor {
       });
   }
 
+  // Computer vision
+
+  updateSolution() {
+    const pairs = this.completePairs();
+
+    const pointsEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(3)`);
+    pointsEl.innerHTML = pairs.length;
+
+    if (!this.cvReady) {
+      // Abort if OpenCV is not ready yet
+      // Flag is set by cv.onRuntimeInitialized externally
+      return;
+    }
+
+    const captureCanvas = document.getElementById(this.currentCameraId);
+
+    const imageWidth = captureCanvas.width;
+    const imageHeight = captureCanvas.height;
+    const sensorWidth = 0.036;
+    const sensorHeight = (sensorWidth * imageHeight) / imageWidth;
+    const focalLength = 0.05;
+
+    // const points2d = [
+    //   0, 0,
+    //   imageWidth - 1, 0,
+    //   imageWidth - 1, imageHeight - 1,
+    //   0, imageHeight - 1,
+    // ];
+    //
+    // const points3d = [
+    //   -0.539905, -0.303625, 0,
+    //   0.539754, -0.303495, 0,
+    //   0.539412, 0.303165, 0,
+    //   -0.539342, 0.303176, 0,
+    // ];
+
+    const points2d = pairs.map(({ image }) => [image.x, image.y]).flat();
+    const points3d = pairs.map(({ model }) => [model.x, model.y, model.z]).flat();
+
+    try {
+      const solution = solvePnP(
+        imageWidth,
+        imageHeight,
+        sensorWidth,
+        sensorHeight,
+        focalLength,
+        points2d,
+        points3d,
+      );
+      console.log('solvePnP', solution);
+
+      // TODO: calculate and update re-projection error
+      const errorEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(4)`);
+      errorEl.innerHTML = `${Math.round(solution.error * 1000) / 1000}`;
+
+      const poseEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(5)`);
+      poseEl.innerHTML = JSON.stringify(solution);
+
+      // Update the camera object in the 3D scene
+      const camAxes = this.scene.getObjectByName(this.currentCameraId);
+      camAxes.position.set(solution.position.x, solution.position.y, solution.position.z);
+      const camRot = new THREE.Euler(solution.rotation.x, solution.rotation.y, solution.rotation.z, 'XYZ');
+      camAxes.setRotationFromEuler(camRot);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   // Interaction
 
   lastPair() {
@@ -266,6 +351,11 @@ export default class PointEditor {
     return last.image !== undefined && last.model !== undefined;
   }
 
+  completePairs() {
+    return this.currentPointPairs()
+      .filter((pp) => pp.image !== undefined && pp.model !== undefined);
+  }
+
   readyForNewPair() {
     return this.lastPair() === undefined || this.lastPairComplete();
   }
@@ -275,6 +365,8 @@ export default class PointEditor {
       const pointPairs = this.currentPointPairs();
       pointPairs.splice(pointPairs.length - 1, 1);
     }
+
+    setStatusText('');
   }
 
   waitingForModelPoint() {
@@ -332,6 +424,9 @@ export default class PointEditor {
       this.currentPointPairs().push({});
 
       setStatusText('Waiting for model point');
+    } else {
+      // This image point finishes the pair so we can clear the status text
+      setStatusText('');
     }
 
     // Set the camera point position

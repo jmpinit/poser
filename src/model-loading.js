@@ -18,6 +18,9 @@ export default function attachModelLoaders(scene) {
     const texLoader = new THREE.TextureLoader();
     inputTexture = texLoader.load(url);
 
+    // Enable the 3D model button
+    document.getElementById('input-model').removeAttribute('disabled');
+
     console.log('Texture loaded!', inputTexture);
   });
 
