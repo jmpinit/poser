@@ -1,8 +1,48 @@
 import * as THREE from 'three';
+import Ajv from 'ajv';
+import YAML from 'yaml';
 import ReferencePoints from './reference-points';
 import ModelInteractionHandler from './model-interaction-handler';
 import CameraManager from './camera';
-import { solvePnP } from './cv';
+import { solvePnPRaw } from './cv';
+
+const ajv = new Ajv();
+
+const validateCamInfo = ajv.compile({
+  type: 'object',
+  properties: {
+    camera_matrix: {
+      type: 'object',
+      properties: {
+        rows: { type: 'integer' },
+        cols: { type: 'integer' },
+        data: {
+          type: 'array',
+          minItems: 9,
+          maxItems: 9,
+        },
+      },
+      required: ['rows', 'cols', 'data'],
+    },
+    distortion_coefficients: {
+      type: 'object',
+      properties: {
+        rows: { type: 'integer' },
+        cols: { type: 'integer' },
+        data: {
+          type: 'array',
+          minItems: 8,
+          maxItems: 8,
+        },
+      },
+      required: ['rows', 'cols', 'data'],
+    },
+    distortion_model: { type: 'string' },
+    image_width: { type: 'integer' },
+    image_height: { type: 'integer' },
+  },
+  required: ['camera_matrix', 'distortion_coefficients', 'distortion_model', 'image_width', 'image_height'],
+});
 
 function getSelectedToolName() {
   return document.querySelector('input[name="sel-tool"]:checked').value;
@@ -24,7 +64,7 @@ function drawPt(ctx, x, y) {
   ctx.stroke();
 }
 
-function downloadObjectAsJson(exportObj, exportName){
+function downloadObjectAsJson(exportObj, exportName) {
   // Adapted from https://stackoverflow.com/a/30800715
   const dataStr = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(exportObj))}`;
   const downloadAnchorNode = document.createElement('a');
@@ -33,6 +73,14 @@ function downloadObjectAsJson(exportObj, exportName){
   document.body.appendChild(downloadAnchorNode); // required for Firefox
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
+}
+
+function assertValidCameraInfo(camInfo) {
+  const valid = validateCamInfo(camInfo);
+
+  if (!valid) {
+    throw new Error(ajv.errorsText(validateCamInfo.errors));
+  }
 }
 
 /**
@@ -101,6 +149,44 @@ export default class PointEditor {
     });
     viewCaptureButtonItemEl.appendChild(viewCaptureButtonEl);
     rowEl.appendChild(viewCaptureButtonItemEl);
+
+    const uploadCamInfoButtonItemEl = document.createElement('td');
+    const uploadCamInfo = document.createElement('input');
+    uploadCamInfo.setAttribute('type', 'file');
+    uploadCamInfo.setAttribute('accept', '.json,.yml');
+    uploadCamInfo.addEventListener('change', () => {
+      const uploadedFile = uploadCamInfo.files[0];
+      const fileReader = new FileReader();
+      fileReader.onload = (event) => {
+        console.log(uploadedFile.name);
+
+        try {
+          let cameraInfo;
+
+          if (uploadedFile.name.endsWith('.yml')) {
+            cameraInfo = YAML.parse(event.target.result);
+          } else if (uploadedFile.name.endsWith('.json')) {
+            cameraInfo = JSON.parse(event.target.result);
+          } else {
+            alert('Unrecognized file type');
+          }
+
+          assertValidCameraInfo(cameraInfo);
+
+          this.cameraInfo[device.deviceId] = {
+            ...this.cameraInfo[device.deviceId],
+            ...cameraInfo,
+          };
+
+          console.log(this.cameraInfo);
+        } catch (e) {
+          console.error('Failed to read uploaded file as JSON:', e);
+        }
+      };
+      fileReader.readAsText(uploadedFile);
+    });
+    uploadCamInfoButtonItemEl.appendChild(uploadCamInfo);
+    rowEl.appendChild(uploadCamInfoButtonItemEl);
 
     const pointsEl = document.createElement('td');
     pointsEl.innerHTML = points;
@@ -287,9 +373,13 @@ export default class PointEditor {
   // Computer vision
 
   updateSolution() {
+    if (this.cameraInfo[this.currentCameraId] === undefined) {
+      return;
+    }
+
     const pairs = this.completePairs();
 
-    const pointsEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(3)`);
+    const pointsEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(4)`);
     pointsEl.innerHTML = pairs.length;
 
     if (!this.cvReady) {
@@ -320,30 +410,33 @@ export default class PointEditor {
     //   -0.539342, 0.303176, 0,
     // ];
 
+    const {
+      camera_matrix: camMatrix,
+      distortion_coefficients: distortionCoeffs,
+    } = this.cameraInfo[this.currentCameraId];
+    console.log(this.cameraInfo[this.currentCameraId]);
+
     const points2d = pairs.map(({ image }) => [image.x, image.y]).flat();
     const points3d = pairs.map(({ model }) => [model.x, model.y, model.z]).flat();
 
     try {
-      const solution = solvePnP(
-        imageWidth,
-        imageHeight,
-        sensorWidth,
-        sensorHeight,
-        focalLength,
-        points2d,
+      const solution = solvePnPRaw(
         points3d,
+        points2d,
+        camMatrix.data,
+        distortionCoeffs.data,
       );
 
       this.solutions[this.currentCameraId] = {
-        label: this.cameraInfo[this.currentCameraId],
+        label: this.cameraInfo[this.currentCameraId].label,
         pose: solution,
       };
 
       // TODO: calculate and update re-projection error
-      const errorEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(4)`);
+      const errorEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(5)`);
       errorEl.innerHTML = `${Math.round(solution.error * 1000) / 1000}`;
 
-      const poseEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(5)`);
+      const poseEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(6)`);
       poseEl.innerHTML = JSON.stringify(solution);
 
       // Update the camera object in the 3D scene
