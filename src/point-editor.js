@@ -4,9 +4,11 @@ import YAML from 'yaml';
 import ReferencePoints from './reference-points';
 import ModelInteractionHandler from './model-interaction-handler';
 import CameraManager from './camera';
-import { solvePnPRaw } from './cv';
+import { solvePnPRaw, distance } from './cv';
 
 const ajv = new Ajv();
+
+const SELECT_RADIUS = 10;
 
 const validateCamInfo = ajv.compile({
   type: 'object',
@@ -54,7 +56,7 @@ function setStatusText(text) {
 }
 
 function drawPt(ctx, x, y) {
-  ctx.strokeStyle = '#f00';
+  ctx.strokeStyle = '#f0f';
 
   ctx.beginPath();
   ctx.moveTo(x - 5, y - 5);
@@ -251,13 +253,13 @@ export default class PointEditor {
       el.addEventListener('click', () => {
         const toolSelected = getSelectedToolName();
 
-        if (toolSelected !== this.currentTool) {
+        if (toolSelected !== this.currentToolName) {
           // Handle tool change
 
           // If we were in the middle of creating a new point pair, cancel it
           this.cancelIncompletePair();
 
-          this.currentTool = toolSelected;
+          this.currentToolName = toolSelected;
           console.log(`Current tool is now ${this.currentToolName}`);
         }
       });
@@ -378,6 +380,11 @@ export default class PointEditor {
     }
 
     const pairs = this.completePairs();
+
+    if (pairs.length < 4) {
+      // Not enough points for a solution yet
+      return;
+    }
 
     const pointsEl = document.querySelector(`#row-${this.currentCameraId} :nth-child(4)`);
     pointsEl.innerHTML = pairs.length;
@@ -505,52 +512,116 @@ export default class PointEditor {
     return this.lastPair().image === undefined;
   }
 
+  nearestImagePoint(x, y) {
+    let nearest;
+    let nearestDist;
+
+    const imagePoints = this.currentPointPairs().map(({ image }) => image);
+
+    for (let i = 0; i < imagePoints.length; i += 1) {
+      const pt = imagePoints[i];
+      const dist = distance(pt.x, pt.y, x, y);
+
+      if (nearest === undefined || dist < nearestDist) {
+        nearest = pt;
+        nearestDist = dist;
+      }
+    }
+
+    return nearest;
+  }
+
+  nearestModelPoint(position) {
+    let nearest;
+    let nearestDist;
+
+    const modelPoints = this.currentPointPairs().map(({ model }) => model);
+
+    for (let i = 0; i < modelPoints.length; i += 1) {
+      const pt = modelPoints[i];
+      const dist = position.distanceTo(pt);
+
+      if (nearest === undefined || dist < nearestDist) {
+        nearest = pt;
+        nearestDist = dist;
+      }
+    }
+
+    return nearest;
+  }
+
   handleModelClick(position) {
     console.log('Model click', position, this.currentPointPairs());
 
-    if (this.waitingForImagePoint()) {
-      // Need to wait for the camera point to be defined
-      // before we define any more model points
-      return;
+    if (this.currentToolName === 'create') {
+      if (this.waitingForImagePoint()) {
+        // Need to wait for the camera point to be defined
+        // before we define any more model points
+        return;
+      }
+
+      if (this.readyForNewPair()) {
+        // Add a new empty point pair
+        this.currentPointPairs().push({});
+
+        setStatusText('Waiting for image point');
+      } else {
+        // This model point finishes the pair so we can clear the status text
+        setStatusText('');
+      }
+
+      // Set the camera point position
+      this.lastPair().model = position;
+    } else if (this.currentToolName === 'move') {
+
+    } else if (this.currentToolName === 'delete') {
+      const nearest = this.nearestModelPoint(position);
+
+      if (nearest !== undefined && position.distanceTo(nearest) <= SELECT_RADIUS) {
+        // Remove the selected point
+        this.pointPairs[this.currentCameraId] = this.currentPointPairs()
+          .filter(({ model }) => model !== nearest);
+
+        console.log('Deleted', nearest);
+      }
     }
-
-    if (this.readyForNewPair()) {
-      // Add a new empty point pair
-      this.currentPointPairs().push({});
-
-      setStatusText('Waiting for image point');
-    } else {
-      // This model point finishes the pair so we can clear the status text
-      setStatusText('');
-    }
-
-    // Set the camera point position
-    this.lastPair().model = position;
 
     this.render();
   }
 
   handleImageClick(x, y) {
-    console.log('Image click', x, y);
+    if (this.currentToolName === 'create') {
+      if (this.waitingForModelPoint()) {
+        // Need to wait for the model point to be defined
+        // before we define any more model points
+        return;
+      }
 
-    if (this.waitingForModelPoint()) {
-      // Need to wait for the model point to be defined
-      // before we define any more model points
-      return;
+      if (this.readyForNewPair()) {
+        // Add a new empty point pair
+        this.currentPointPairs().push({});
+
+        setStatusText('Waiting for model point');
+      } else {
+        // This image point finishes the pair so we can clear the status text
+        setStatusText('');
+      }
+
+      // Set the camera point position
+      this.lastPair().image = { x, y };
+    } else if (this.currentToolName === 'move') {
+
+    } else if (this.currentToolName === 'delete') {
+      const nearest = this.nearestImagePoint(x, y);
+
+      if (nearest !== undefined && distance(x, y, nearest.x, nearest.y) <= SELECT_RADIUS) {
+        // Remove the selected point
+        this.pointPairs[this.currentCameraId] = this.currentPointPairs()
+          .filter(({ image }) => image !== nearest);
+
+        console.log('Deleted', nearest);
+      }
     }
-
-    if (this.readyForNewPair()) {
-      // Add a new empty point pair
-      this.currentPointPairs().push({});
-
-      setStatusText('Waiting for model point');
-    } else {
-      // This image point finishes the pair so we can clear the status text
-      setStatusText('');
-    }
-
-    // Set the camera point position
-    this.lastPair().image = { x, y };
 
     this.render();
   }
