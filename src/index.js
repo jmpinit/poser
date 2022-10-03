@@ -46,29 +46,12 @@ poseObject.name = 'pose-object';
 scene.add(poseObject);
 
 // Create some test geometry
-{
-  const geometry = new THREE.SphereGeometry(150, 32, 32);
-  const material = new THREE.MeshBasicMaterial({ color: 0xaaaaaaaa });
-  const testObj = new THREE.Mesh(geometry, material);
-  poseObject.add(testObj);
-}
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.update();
-
-// =================
-// SCENE INTERACTION
-// =================
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  controls.update();
-
-  renderer.render(scene, camera);
-}
-
-animate();
+// {
+//   const geometry = new THREE.SphereGeometry(150, 32, 32);
+//   const material = new THREE.MeshBasicMaterial({ color: 0xaaaaaaaa });
+//   const testObj = new THREE.Mesh(geometry, material);
+//   poseObject.add(testObj);
+// }
 
 attachModelLoaders(scene);
 
@@ -83,3 +66,17 @@ cv.onRuntimeInitialized = () => {
   // HACK: maybe make this nicer later by queuing ops until runtime is ready?
   pointEditor.cvReady = true;
 };
+
+// =========
+// RENDERING
+// =========
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  pointEditor.update();
+
+  renderer.render(scene, camera);
+}
+
+animate();

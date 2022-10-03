@@ -5,6 +5,8 @@ import ReferencePoints from './reference-points';
 import ModelInteractionHandler from './model-interaction-handler';
 import CameraManager from './camera';
 import { solvePnPRaw, distance } from './cv';
+import {element} from 'three/examples/jsm/nodes/shadernode/ShaderNodeBaseElements';
+import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
 
 const ajv = new Ajv();
 
@@ -56,7 +58,8 @@ function setStatusText(text) {
 }
 
 function drawPt(ctx, x, y) {
-  ctx.strokeStyle = '#f0f';
+  ctx.strokeStyle = '#ff0';
+  ctx.lineWidth = 3;
 
   ctx.beginPath();
   ctx.moveTo(x - 5, y - 5);
@@ -247,6 +250,11 @@ export default class PointEditor {
     const poseObject = this.scene.getObjectByName('pose-object');
     poseObject.add(this.modelPointsManager.threeObject);
 
+    // 3D camera controls
+
+    this.camControls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.camControls.update();
+
     // Tool selection
 
     document.getElementsByName('sel-tool').forEach((el) => {
@@ -267,31 +275,60 @@ export default class PointEditor {
 
     // Wire up interaction events
 
+    // Model
     const modelInteractionHandler = new ModelInteractionHandler(
       this.renderer,
       this.camera,
       this.scene,
     );
     modelInteractionHandler.on('click', (position) => this.handleModelClick(position));
+    modelInteractionHandler.on('drag', (position) => this.handleModelDrag(position));
+    modelInteractionHandler.on('mousedown', (position) => this.handleModelMouseDown(position));
+    modelInteractionHandler.on('mouseup', () => this.handleModelMouseUp());
+
+    // Image
 
     const imageOverlayCanvas = document.getElementById('image-overlay');
-    imageOverlayCanvas.addEventListener('click', (event) => {
-      // Convert the click into image coordinates
-      const elementWidth = event.target.offsetWidth;
-      const elementHeight = event.target.offsetHeight;
-      const pixelX = (imageOverlayCanvas.width * event.offsetX) / elementWidth;
-      const pixelY = (imageOverlayCanvas.height * event.offsetY) / elementHeight;
 
-      if (this.currentToolName !== undefined) {
-        this.handleImageClick(pixelX, pixelY);
-      }
-    });
+    function elementToImageCoordinates(elX, elY, elWidth, elHeight, imageWidth, imageHeight) {
+      return {
+        x: (imageWidth * elX) / elWidth,
+        y: (imageHeight * elY) / elHeight,
+      };
+    }
+
+    const connectMouseEvent = (eventHandler) => {
+      return (event) => {
+        const { x, y } = elementToImageCoordinates(
+          event.offsetX,
+          event.offsetY,
+          event.target.offsetWidth,
+          event.target.offsetHeight,
+          imageOverlayCanvas.width,
+          imageOverlayCanvas.height,
+        );
+
+        if (this.currentToolName !== undefined) {
+          eventHandler(x, y);
+        }
+      };
+    };
+
+    console.log(imageOverlayCanvas)
+    imageOverlayCanvas.addEventListener('click', connectMouseEvent((x, y) => this.handleImageClick(x, y)));
+    imageOverlayCanvas.addEventListener('mousemove', connectMouseEvent((x, y) => this.handleImageDrag(x, y)));
+    imageOverlayCanvas.addEventListener('mousedown', connectMouseEvent((x, y) => this.handleImageMouseDown(x, y)));
+    imageOverlayCanvas.addEventListener('mouseup', () => this.handleImageMouseUp());
 
     // Export button
     document.getElementById('btn-export-solution').addEventListener('click', () => {
       console.log(JSON.stringify(this.solutions));
       downloadObjectAsJson(this.solutions, 'camera-solutions');
     });
+  }
+
+  update() {
+    this.camControls.update();
   }
 
   // Rendering
@@ -302,7 +339,10 @@ export default class PointEditor {
 
   updateModelPoints() {
     const pointPairs = this.currentPointPairs();
-    console.log('Rendering model points', pointPairs);
+
+    if (pointPairs === undefined) {
+      return;
+    }
 
     this.modelPointsManager.clearPoints();
 
@@ -314,7 +354,10 @@ export default class PointEditor {
 
   renderImagePoints() {
     const pointPairs = this.currentPointPairs();
-    console.log('Rendering image points', pointPairs);
+
+    if (pointPairs === undefined) {
+      return;
+    }
 
     const imageOverlay = document.getElementById('image-overlay');
     const ctx = imageOverlay.getContext('2d');
@@ -494,6 +537,7 @@ export default class PointEditor {
     }
 
     setStatusText('');
+    this.render();
   }
 
   waitingForModelPoint() {
@@ -513,6 +557,10 @@ export default class PointEditor {
   }
 
   nearestImagePoint(x, y) {
+    if (this.currentPointPairs().length === 0) {
+      return undefined;
+    }
+
     let nearest;
     let nearestDist;
 
@@ -532,6 +580,10 @@ export default class PointEditor {
   }
 
   nearestModelPoint(position) {
+    if (this.currentPointPairs().length === 0) {
+      return undefined;
+    }
+
     let nearest;
     let nearestDist;
 
@@ -572,8 +624,8 @@ export default class PointEditor {
 
       // Set the camera point position
       this.lastPair().model = position;
-    } else if (this.currentToolName === 'move') {
 
+      this.updateModelPoints();
     } else if (this.currentToolName === 'delete') {
       const nearest = this.nearestModelPoint(position);
 
@@ -581,12 +633,10 @@ export default class PointEditor {
         // Remove the selected point
         this.pointPairs[this.currentCameraId] = this.currentPointPairs()
           .filter(({ model }) => model !== nearest);
-
-        console.log('Deleted', nearest);
       }
-    }
 
-    this.render();
+      this.render();
+    }
   }
 
   handleImageClick(x, y) {
@@ -609,8 +659,8 @@ export default class PointEditor {
 
       // Set the camera point position
       this.lastPair().image = { x, y };
-    } else if (this.currentToolName === 'move') {
 
+      this.renderImagePoints();
     } else if (this.currentToolName === 'delete') {
       const nearest = this.nearestImagePoint(x, y);
 
@@ -618,11 +668,85 @@ export default class PointEditor {
         // Remove the selected point
         this.pointPairs[this.currentCameraId] = this.currentPointPairs()
           .filter(({ image }) => image !== nearest);
-
-        console.log('Deleted', nearest);
       }
+
+      this.render();
     }
 
-    this.render();
+    this.renderImagePoints();
+  }
+
+  handleModelDrag(position) {
+    if (this.currentToolName !== 'move') {
+      return;
+    }
+
+    if (this.draggedModelPoint === undefined) {
+      return;
+    }
+
+    this.draggedModelPoint.copy(position);
+    this.updateModelPoints();
+  }
+
+  handleModelMouseDown(position) {
+    if (this.currentToolName !== 'move') {
+      return;
+    }
+
+    const nearest = this.nearestModelPoint(position);
+
+    if (nearest === undefined || position.distanceTo(nearest) > SELECT_RADIUS) {
+      return;
+    }
+
+    this.draggedModelPoint = nearest;
+
+    this.camControls.enabled = false;
+  }
+
+  handleModelMouseUp() {
+    if (this.currentToolName !== 'move') {
+      return;
+    }
+
+    this.draggedModelPoint = undefined;
+    this.camControls.enabled = true;
+  }
+
+  handleImageDrag(x, y) {
+    if (this.currentToolName !== 'move') {
+      return;
+    }
+
+    if (this.draggedImagePoint === undefined) {
+      return;
+    }
+
+    this.draggedImagePoint.x = x;
+    this.draggedImagePoint.y = y;
+    this.renderImagePoints();
+  }
+
+  handleImageMouseDown(x, y) {
+    if (this.currentToolName !== 'move') {
+      return;
+    }
+
+    const nearest = this.nearestImagePoint(x, y);
+
+    if (nearest === undefined || distance(x, y, nearest.x, nearest.y) > SELECT_RADIUS) {
+      return;
+    }
+
+    this.draggedImagePoint = nearest;
+  }
+
+  handleImageMouseUp() {
+    if (this.currentToolName !== 'move') {
+      return;
+    }
+
+    this.draggedImagePoint = undefined;
   }
 }
